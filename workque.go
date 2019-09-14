@@ -1,5 +1,6 @@
 // copyright Imran Peerbhai
-// This file is licensed under the terms of the standard MIT license.
+// This file is licensed under the terms of the 3-clause BSD license.
+// This software is provided "AS-IS", and there are no warraunties of any kind.  Use at your own risk.
 
 // package digsispatch is originally written to create a ROS style topic system for a robot rover.
 // The basic idea is that there are 2 different topics that any endpoint can publish/subscribe:
@@ -15,6 +16,11 @@
 //	However, we abstract differently than ROS.  We have "commands", which are fast channel and frequently looked at.  Think "RC remote joystick" information
 //	And we have Information messages -- these are larger and slower.  Think "Video stream" information.
 //	The "commands" are encapsulated in a dispatch structure, and the bytestreams in an InformationMessage structure.
+// 	This is a push model.  Client requests a websocket, server upgrades the client.  Now, Client has a reader goroutine that gets called whenever server wants.
+// 	So, there's no need for a "Get/Post" cycle.  Clients can request a PUT, but client gets pushed a "GET", doesn't "request" it.
+// 	The same code will be on both Client and Server.
+
+// 	Due to network issues, a second go-routine manages the subscribition notifications.
 
 // Example Workflow:
 //	We have "tank" robot called "robot1"  (note, this will likely be a GUID in the future)
@@ -27,10 +33,19 @@
 
 package digdispatch
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
+
+// Message is the bytestream representation of the structure.
+type Message interface {
+	ToBytes() ([]byte, error)              // for sending
+	TryParse([]byte) (*interface{}, error) // for recieving
+}
 
 // TimeShake is  a time handshake, used to track when an object gets recieved.
 type TimeShake struct {
@@ -59,6 +74,21 @@ type WorkQueue struct {
 	Subscribers map[string][]string           // A map of connected IDs and a list what topics they want messages about.
 	Dispatches  map[string]DispatchItem       // all dispatches for all robots, key is catenation of (robot+topic)
 	Messages    map[string]InformationMessage // all messages from all robots, key is catenation  of (robot+topic)
+}
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
+// ToBytes creates a bytestream from this structure.
+func (thisDispatch DispatchItem) ToBytes() ([]byte, error) {
+	return (json.Marshal(thisDispatch))
+}
+
+// TryParse attempts to convert the bytestream to this strcuture.
+func (thisDispatch DispatchItem) TryParse(byteStream []byte) (*DispatchItem, error) {
+	tempRetval := new(DispatchItem)
+	unmarsErr := json.Unmarshal(byteStream, tempRetval)
+	return tempRetval, unmarsErr
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -128,5 +158,3 @@ func (workItem *WorkQueue) PickupDispatchesForTaget(target string) ([]DispatchIt
 	}
 	return retList, foundDispatches // we got nothing for that target.
 }
-
-//-----------------------------------------------------------------------------------------------
