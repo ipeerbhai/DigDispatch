@@ -1,5 +1,5 @@
 // copyright Imran Peerbhai
-// This file is licensed under the terms of the 3-clause BSD license.
+// This file is licensed under the terms of the MIT license.
 // This software is provided "AS-IS", and there are no warruanties of any kind.  Use at your own risk.
 
 // package digsispatch is originally written to create a ROS style topic system for a robot rover.
