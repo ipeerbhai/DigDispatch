@@ -1,6 +1,6 @@
 // copyright Imran Peerbhai
 // This file is licensed under the terms of the 3-clause BSD license.
-// This software is provided "AS-IS", and there are no warraunties of any kind.  Use at your own risk.
+// This software is provided "AS-IS", and there are no warruanties of any kind.  Use at your own risk.
 
 // package digsispatch is originally written to create a ROS style topic system for a robot rover.
 // The basic idea is that there are 2 different topics that any endpoint can publish/subscribe:
@@ -77,7 +77,17 @@ type WorkQueue struct {
 }
 
 //-----------------------------------------------------------------------------------------------
+
+// NewTimeShake creates a timeshake instance and returns it.
+func NewTimeShake() TimeShake {
+	Created := TimeShake{EnquedTime: time.Now()}
+	return Created
+}
+
 //-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
+// DispatchItem functions.
 
 // ToBytes creates a bytestream from this structure.
 func (thisDispatch DispatchItem) ToBytes() ([]byte, error) {
@@ -94,12 +104,24 @@ func (thisDispatch DispatchItem) TryParse(byteStream []byte) (*DispatchItem, err
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
 
-// NewTimeShake creates a timeshake instance and returns it.
-func NewTimeShake() TimeShake {
-	Created := TimeShake{EnquedTime: time.Now()}
-	return Created
+// InformationMessage functions.
+
+// ToBytes creates a bytestream from this structure.
+func (thisInfo InformationMessage) ToBytes() ([]byte, error) {
+	return (json.Marshal(thisInfo))
 }
 
+// TryParse attempts to convert the bytestream to this strcuture.
+func (thisInfo InformationMessage) TryParse(byteStream []byte) (*InformationMessage, error) {
+	tempRetval := new(InformationMessage)
+	unmarsErr := json.Unmarshal(byteStream, tempRetval)
+	return tempRetval, unmarsErr
+}
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
+// WorkQue functions
 //-----------------------------------------------------------------------------------------------
 
 // Init initializes all the information we need.
@@ -158,3 +180,6 @@ func (workItem *WorkQueue) PickupDispatchesForTaget(target string) ([]DispatchIt
 	}
 	return retList, foundDispatches // we got nothing for that target.
 }
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
