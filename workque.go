@@ -125,24 +125,24 @@ func (thisInfo InformationMessage) TryParse(byteStream []byte) (*InformationMess
 //-----------------------------------------------------------------------------------------------
 
 // Init initializes all the information we need.
-func (workItem *WorkQueue) Init() bool {
-	workItem.Publishers = make(map[string][]string, 0)
-	workItem.Subscribers = make(map[string][]string, 0)
-	workItem.Dispatches = make(map[string]DispatchItem, 0)
-	workItem.Messages = make(map[string]InformationMessage, 0)
+func (workItems *WorkQueue) Init() bool {
+	workItems.Publishers = make(map[string][]string, 0)
+	workItems.Subscribers = make(map[string][]string, 0)
+	workItems.Dispatches = make(map[string]DispatchItem, 0)
+	workItems.Messages = make(map[string]InformationMessage, 0)
 	return true
 }
 
 //-----------------------------------------------------------------------------------------------
 
 // PublishDispatchItem is called by controllers adding in a command for a robot
-func (workItem *WorkQueue) PublishDispatchItem(sender string, target string, topic string, command string) bool {
+func (workItems *WorkQueue) PublishDispatchItem(sender string, target string, topic string, command string) bool {
 	// Targets can come and go due to network issues.  A watchdog is constantly pinging them.  The watchdog can remove targets that fail to ping.
 	// We can't add items to a target that's not in the targets pool.
 
-	if _, containsKey := workItem.Publishers[target]; containsKey {
+	if _, containsKey := workItems.Publishers[target]; containsKey {
 		dispatch := DispatchItem{Sender: sender, Topic: topic, Command: command, TemporalShake: NewTimeShake()}
-		workItem.Dispatches[target+topic] = dispatch
+		workItems.Dispatches[target+topic] = dispatch
 	} else {
 		return false
 	}
@@ -152,33 +152,48 @@ func (workItem *WorkQueue) PublishDispatchItem(sender string, target string, top
 //-----------------------------------------------------------------------------------------------
 
 // PickupDispatchesForTaget gives a target a slice of all dispatch items waiting for that target's ID, clears the Dispatches for that target.
-func (workItem *WorkQueue) PickupDispatchesForTaget(target string) ([]DispatchItem, bool) {
+func (workItems *WorkQueue) PickupDispatchesForTaget(target string) ([]DispatchItem, bool) {
 	// test to see if we have any dispatches for the target.
 	var targetTopics []string
 	var retList []DispatchItem
 	foundDispatches := false
 
 	// check to see that we have a subscription for the target, just return otherwise.
-	if _, containsKey := workItem.Subscribers[target]; containsKey {
+	if _, containsKey := workItems.Subscribers[target]; containsKey {
 		targetTopics = make([]string, 0)
 		retList = make([]DispatchItem, 0)
 
 		// 1. Build a list of subscribed topics for the target
-		for _, topic := range workItem.Subscribers[target] {
+		for _, topic := range workItems.Subscribers[target] {
 			targetTopics = append(targetTopics, topic)
 
 		}
 
 		// 2. check the dispatch map for items that match
 		for _, topic := range targetTopics {
-			if _, containsKey := workItem.Dispatches[target+topic]; containsKey {
+			if _, containsKey := workItems.Dispatches[target+topic]; containsKey {
 				// we have this topic dispatch for this target.
 				foundDispatches = true
-				retList = append(retList, workItem.Dispatches[target+topic])
+				retList = append(retList, workItems.Dispatches[target+topic])
 			}
 		}
 	}
 	return retList, foundDispatches // we got nothing for that target.
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// AddSubscriber adds a subscriber to the list of who to notify when.
+func (workItems *WorkQueue) AddSubscriber(Notify string, From string, Topic string) {
+	SubScriptionTopic := From + "/" + Topic
+	workItems.Subscribers[Notify] = append(workItems.Subscribers[Notify], SubScriptionTopic)
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// ReceiveData takes a bytestream, figures out what it is, and adds to appropriate queueue.
+func (workItems *WorkQueue) ReceiveData(stream []byte) {
+
 }
 
 //-----------------------------------------------------------------------------------------------
