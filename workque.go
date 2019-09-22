@@ -126,6 +126,14 @@ func (myMap NetworkedTopicMap) GetKeys() []string {
 	return keys
 }
 
+// NewMessage creates is a simpification function to create a Message with fields
+func NewMessage(sender string, topic string, buffer []byte) *Message {
+	retVal := new(Message)
+	retVal.MetaData = MessageMetaData{Sender: sender, Topic: topic, TemporalShake: NewTimeShake()}
+	retVal.MessageBuffer = buffer
+	return retVal
+}
+
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
 
