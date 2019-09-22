@@ -1,23 +1,18 @@
-// copyright Imran Peerbhai
+//Copyright Imran Peerbhai
 // This file is licensed under the terms of the MIT license.
-// This software is provided "AS-IS", and there are no warruanties of any kind.  Use at your own risk.
+// This software is provided "AS-IS", and there are no warranties of any kind.  Use at your own risk.
 
-// package digsispatch is originally written to create a ROS style topic system for a robot rover.
+// package digdispatch is originally written to create a ROS style topic system for a robot rover.
 // The basic idea is that there are 2 different topics that any endpoint can publish/subscribe:
 //	One is to send commands to a robot, while the other is to send sensor data back to control agents.
 
 // Definitions:
-//	A "controller" is a client of some sort, that speaks to the robot
-//	A "robot" is a machine with actuators and sensors.
+//	A "controller" is a client node of some sort, that speaks to the robot
+//	A "robot" is a client node with actuators and sensors.
 // 	A robot may be a controller for another robot or even itself.
 
 // Theory of operation:
 //	Robots and Controllers use a pub/sub model like ROS.  Nothing is a "service" in the ROS sense -- everything goes through this channel.
-//	However, we abstract differently than ROS.  We have "commands", which are fast channel and frequently looked at.  Think "RC remote joystick" information
-//	And we have Information messages -- these are larger and slower.  Think "Video stream" information.
-//	The "commands" are encapsulated in a dispatch structure, and the bytestreams in an InformationMessage structure.
-// 	This is a push model.  Client requests a websocket, server upgrades the client.  Now, Client has a reader goroutine that gets called whenever server wants.
-// 	So, there's no need for a "Get/Post" cycle.  Clients can request a PUT, but client gets pushed a "GET", doesn't "request" it.
 // 	The same code will be on both Client and Server.
 
 // 	Due to network issues, a second go-routine manages the subscribition notifications.
@@ -25,7 +20,7 @@
 // Example Workflow:
 //	We have "tank" robot called "robot1"  (note, this will likely be a GUID in the future)
 //	We have a "UX" controller called "controller1" (also likely a GUID in the future)
-//	Robot1 connects via websocket to the queue manager.  It subscribes to a dispatch topic "tank".
+//	Robot1 connects via websocket to the queue manager.  It subscribes to a dispatch topic "DriveControl".
 //	Controller1 connects via a websocket to the queue manager.  It publishes to a dispatch topic "tank" specifying a target of "robot1".
 //	Publish is asynch -- it simply adds the most recent dispatch to the map.
 //	A drainer sends a dispatch to the websocket connected to robot1.
@@ -35,17 +30,15 @@ package digdispatch
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
 
-// Message is the bytestream representation of the structure.
-type Message interface {
-	ToBytes() ([]byte, error)              // for sending
-	TryParse([]byte) (*interface{}, error) // for recieving
-}
+// NetworkedTopicMap represents nodes in a connection graph and what topics those nodes want notifications for.
+type NetworkedTopicMap map[string][]string
 
 // TimeShake is  a time handshake, used to track when an object gets recieved.
 type TimeShake struct {
@@ -53,28 +46,62 @@ type TimeShake struct {
 	AcknowledgedTime time.Time // when did we acknowledge the task?
 }
 
-// DispatchItem is designed as commands to the robot
-type DispatchItem struct {
-	Sender        string    // who requested the dispatch?
-	Topic         string    // What are we dispatching?
-	Command       string    // What am I asking the robot to do?
+// MessageMetaData hold metadata about any message, can be composited to anything
+// that may need this data for processing.
+type MessageMetaData struct {
+	Sender        string    // who sent this?
+	Topic         string    // What are we informing?
 	TemporalShake TimeShake // when did things happen?
+	IsPickedUp    bool      // Has this been picked up?
 }
 
-// InformationMessage is designed as information from the robot
-type InformationMessage struct {
-	Topic         string    // What are we informing?
-	MessageBuffer []byte    // the message itself
-	TemporalShake TimeShake // when did things happen?
+// Message is the interchange type.  Everything should .
+type Message struct {
+	MetaData      MessageMetaData // info to process the message
+	MessageBuffer []byte          // the message itself
 }
 
 // WorkQueue actually manages what each robot is doing/saying...
 type WorkQueue struct {
-	Publishers  map[string][]string           // A map of connected IDs and a list of topics they will publish
-	Subscribers map[string][]string           // A map of connected IDs and a list what topics they want messages about.
-	Dispatches  map[string]DispatchItem       // all dispatches for all robots, key is catenation of (robot+topic)
-	Messages    map[string]InformationMessage // all messages from all robots, key is catenation  of (robot+topic)
+	Publishers  NetworkedTopicMap   // A map of connected IDs and a list of topics they will publish
+	Subscribers NetworkedTopicMap   // A map of connected IDs and a list what topics they want messages about.
+	Messages    map[string]*Message // all messages from all robots, key is catenation  of (sender+topic)
 }
+
+// Serializable requires that all message data can go to/from byte slices
+type Serializable *interface {
+	ToBytes() []byte
+	FromBytes([]byte)
+}
+
+// DriveCommand is Serializable, sent from controllers to robots.
+type DriveCommand struct {
+	Command string // what do we want to send?
+}
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+// All Serializable Type conversion functions here
+
+// ToBytes required
+func (robot *DriveCommand) ToBytes() []byte {
+	robotBytes, conversionErr := json.Marshal(robot)
+	if conversionErr == nil {
+		return robotBytes
+	}
+	return nil
+}
+
+// FromBytes finishes up the Serializable interface
+func (robot *DriveCommand) FromBytes(stream []byte) {
+	conversionErr := json.Unmarshal(stream, robot)
+	if conversionErr != nil {
+		robot = new(DriveCommand) // we couldn't convert, so make a blank one.
+	}
+}
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------------------------
 
@@ -84,38 +111,45 @@ func NewTimeShake() TimeShake {
 	return Created
 }
 
-//-----------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------
-
-// DispatchItem functions.
-
-// ToBytes creates a bytestream from this structure.
-func (thisDispatch DispatchItem) ToBytes() ([]byte, error) {
-	return (json.Marshal(thisDispatch))
+// NewMessageMetaData Makes a new, initialized message metadata item.
+func NewMessageMetaData() MessageMetaData {
+	retVal := MessageMetaData{Sender: "", Topic: "", TemporalShake: NewTimeShake(), IsPickedUp: false}
+	return retVal
 }
 
-// TryParse attempts to convert the bytestream to this strcuture.
-func (thisDispatch DispatchItem) TryParse(byteStream []byte) (*DispatchItem, error) {
-	tempRetval := new(DispatchItem)
+// GetKeys provides the network "ids" of nodes. in the connetion graph.
+func (myMap NetworkedTopicMap) GetKeys() []string {
+	keys := make([]string, 0, len(myMap))
+	for k := range myMap {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
+// Message functions.
+
+// ToBytes creates a bytestream from this structure.
+func (thisMessage Message) ToBytes() ([]byte, error) {
+	return (json.Marshal(thisMessage))
+}
+
+// TryParseMessage attempts to convert the bytestream to a message.
+func TryParseMessage(byteStream []byte) (*Message, error) {
+	tempRetval := new(Message)
 	unmarsErr := json.Unmarshal(byteStream, tempRetval)
 	return tempRetval, unmarsErr
 }
 
-//-----------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------
+// Pickup sets the pickup time of a message
+func (thisMessage *Message) Pickup() Message {
+	retValue := Message{MetaData: thisMessage.MetaData, MessageBuffer: thisMessage.MessageBuffer}
+	retValue.MetaData.TemporalShake.AcknowledgedTime = time.Now()
+	retValue.MetaData.IsPickedUp = true
 
-// InformationMessage functions.
-
-// ToBytes creates a bytestream from this structure.
-func (thisInfo InformationMessage) ToBytes() ([]byte, error) {
-	return (json.Marshal(thisInfo))
-}
-
-// TryParse attempts to convert the bytestream to this strcuture.
-func (thisInfo InformationMessage) TryParse(byteStream []byte) (*InformationMessage, error) {
-	tempRetval := new(InformationMessage)
-	unmarsErr := json.Unmarshal(byteStream, tempRetval)
-	return tempRetval, unmarsErr
+	return retValue
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -126,59 +160,12 @@ func (thisInfo InformationMessage) TryParse(byteStream []byte) (*InformationMess
 
 // Init initializes all the information we need.
 func (workItems *WorkQueue) Init() bool {
-	workItems.Publishers = make(map[string][]string, 0)
-	workItems.Subscribers = make(map[string][]string, 0)
-	workItems.Dispatches = make(map[string]DispatchItem, 0)
-	workItems.Messages = make(map[string]InformationMessage, 0)
+	workItems.Publishers = make(NetworkedTopicMap, 0)
+	workItems.Subscribers = make(NetworkedTopicMap, 0)
+	workItems.Messages = make(map[string]*Message, 0)
+
+	go workItems.prepareTrash()
 	return true
-}
-
-//-----------------------------------------------------------------------------------------------
-
-// PublishDispatchItem is called by controllers adding in a command for a robot
-func (workItems *WorkQueue) PublishDispatchItem(sender string, target string, topic string, command string) bool {
-	// Targets can come and go due to network issues.  A watchdog is constantly pinging them.  The watchdog can remove targets that fail to ping.
-	// We can't add items to a target that's not in the targets pool.
-
-	if _, containsKey := workItems.Publishers[target]; containsKey {
-		dispatch := DispatchItem{Sender: sender, Topic: topic, Command: command, TemporalShake: NewTimeShake()}
-		workItems.Dispatches[target+topic] = dispatch
-	} else {
-		return false
-	}
-	return true // we added the item correctly.
-}
-
-//-----------------------------------------------------------------------------------------------
-
-// PickupDispatchesForTaget gives a target a slice of all dispatch items waiting for that target's ID, clears the Dispatches for that target.
-func (workItems *WorkQueue) PickupDispatchesForTaget(target string) ([]DispatchItem, bool) {
-	// test to see if we have any dispatches for the target.
-	var targetTopics []string
-	var retList []DispatchItem
-	foundDispatches := false
-
-	// check to see that we have a subscription for the target, just return otherwise.
-	if _, containsKey := workItems.Subscribers[target]; containsKey {
-		targetTopics = make([]string, 0)
-		retList = make([]DispatchItem, 0)
-
-		// 1. Build a list of subscribed topics for the target
-		for _, topic := range workItems.Subscribers[target] {
-			targetTopics = append(targetTopics, topic)
-
-		}
-
-		// 2. check the dispatch map for items that match
-		for _, topic := range targetTopics {
-			if _, containsKey := workItems.Dispatches[target+topic]; containsKey {
-				// we have this topic dispatch for this target.
-				foundDispatches = true
-				retList = append(retList, workItems.Dispatches[target+topic])
-			}
-		}
-	}
-	return retList, foundDispatches // we got nothing for that target.
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -191,9 +178,51 @@ func (workItems *WorkQueue) AddSubscriber(Notify string, From string, Topic stri
 
 //-----------------------------------------------------------------------------------------------
 
-// ReceiveData takes a bytestream, figures out what it is, and adds to appropriate queueue.
+// ReceiveData takes a bytestream, figures out what it is, and adds to appropriate queue.
 func (workItems *WorkQueue) ReceiveData(stream []byte) {
+	// Steps:
+	// 	Make a message.
+	//	Put into the workqueue structs.
 
+	msg, msgErr := TryParseMessage(stream)
+	if msgErr != nil {
+		fmt.Println(msgErr)
+	} else {
+		msgKey := msg.MetaData.Sender + "/" + msg.MetaData.Topic
+		workItems.Messages[msgKey] = msg
+	}
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// PickupMessagesForSubscriber checks the queue for any messages the subscriber has, returns a slice of them.
+func (workItems *WorkQueue) PickupMessagesForSubscriber(subscriber string) []Message {
+	retMessages := []Message{} // a blank return message.
+
+	if topics, topicFound := workItems.Subscribers[subscriber]; topicFound {
+		for _, topic := range topics {
+			retMessages = append(retMessages, workItems.Messages[topic].Pickup())
+		}
+	}
+	return retMessages
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// prepareTrash is not an exported function, and it constantly reshapes the que to attempt to delete picked up messages
+func (workItems *WorkQueue) prepareTrash() {
+	// always run
+	for {
+		// find all messages.
+		for k, msgPtr := range workItems.Messages {
+			if msgPtr.MetaData.IsPickedUp {
+				// delete the item
+				workItems.Messages[k] = nil
+			}
+		}
+		// sleep this go-routine for 2 seconds
+		time.Sleep(2 * time.Second)
+	}
 }
 
 //-----------------------------------------------------------------------------------------------
