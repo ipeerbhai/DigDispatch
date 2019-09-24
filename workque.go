@@ -79,24 +79,73 @@ type DriveCommand struct {
 	Command string // what do we want to send?
 }
 
+// DriveState is a serializable information struct, sent from robot to the controller.
+type DriveState struct {
+	LeftMotorPower  int // from -100 .. 100, % power to left motor.
+	RightMotorPower int // same as left
+}
+
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
 // All Serializable Type conversion functions here
 
+// toBytes is to compensate for go's lack of generics.  It allows me to impliment the same code in many children.
+func toBytes(data interface{}) []byte {
+	dataBytes, conversionErr := json.Marshal(data)
+	if conversionErr == nil {
+		return dataBytes
+	}
+	return nil // nothing to do
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// frommBytes is a helper to help de-message a serializable.
+func fromBytes(stream []byte) *Message {
+	theMessage := new(Message)
+	parseErr := json.Unmarshal(stream, theMessage)
+	if parseErr != nil {
+		fmt.Println(parseErr)
+		return nil
+	}
+	return theMessage
+}
+
+//-----------------------------------------------------------------------------------------------
+
 // ToBytes required
 func (robot *DriveCommand) ToBytes() []byte {
-	robotBytes, conversionErr := json.Marshal(robot)
-	if conversionErr == nil {
-		return robotBytes
-	}
-	return nil
+	return toBytes(robot)
 }
+
+//-----------------------------------------------------------------------------------------------
 
 // FromBytes finishes up the Serializable interface
 func (robot *DriveCommand) FromBytes(stream []byte) {
 	conversionErr := json.Unmarshal(stream, robot)
 	if conversionErr != nil {
 		robot = new(DriveCommand) // we couldn't convert, so make a blank one.
+	}
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// ToBytes calls a "generic" serializer.
+func (robot *DriveState) ToBytes() []byte {
+	return toBytes(robot)
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// FromBytes converts back to the struct
+func (robot *DriveState) FromBytes(stream []byte) {
+	// 2 steps -- get the message, then the payload
+	msg := fromBytes(stream)
+	if msg != nil {
+		payloadErr := json.Unmarshal(msg.MessageBuffer, robot)
+		if payloadErr != nil {
+			fmt.Println(payloadErr)
+		}
 	}
 }
 
