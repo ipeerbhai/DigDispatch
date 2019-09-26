@@ -37,6 +37,12 @@ import (
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
 
+const (
+	ACTION_ID        = iota
+	ACTION_SUBSCRIBE = iota
+	ACTION_PUBLISH   = iota
+)
+
 // NetworkedTopicMap represents nodes in a connection graph and what topics those nodes want notifications for.
 type NetworkedTopicMap map[string][]string
 
@@ -66,6 +72,13 @@ type WorkQueue struct {
 	Publishers  NetworkedTopicMap   // A map of connected IDs and a list of topics they will publish
 	Subscribers NetworkedTopicMap   // A map of connected IDs and a list what topics they want messages about.
 	Messages    map[string]*Message // all messages from all robots, key is catenation  of (sender+topic)
+}
+
+// ActionMessage is a struct to simplify client/server communication
+type ActionMessage struct {
+	messagePump chan []byte // the actual message pump.
+	ActionType  int         // which action is this?
+	Payload     Message     // The needed data to handle the message.
 }
 
 // Serializable requires that all message data can go to/from byte slices
@@ -193,12 +206,16 @@ func (thisMessage Message) ToBytes() ([]byte, error) {
 	return (json.Marshal(thisMessage))
 }
 
+//-----------------------------------------------------------------------------------------------
+
 // TryParseMessage attempts to convert the bytestream to a message.
 func TryParseMessage(byteStream []byte) (*Message, error) {
 	tempRetval := new(Message)
 	unmarsErr := json.Unmarshal(byteStream, tempRetval)
 	return tempRetval, unmarsErr
 }
+
+//-----------------------------------------------------------------------------------------------
 
 // Pickup sets the pickup time of a message
 func (thisMessage *Message) Pickup() Message {
@@ -236,17 +253,28 @@ func (workItems *WorkQueue) AddSubscriber(Notify string, From string, Topic stri
 //-----------------------------------------------------------------------------------------------
 
 // ReceiveData takes a bytestream, figures out what it is, and adds to appropriate queue.
-func (workItems *WorkQueue) ReceiveData(stream []byte) {
+func (workItems *WorkQueue) ReceiveData(stream []byte) *ActionMessage {
 	// Steps:
-	// 	Make a message.
-	//	Put into the workqueue structs.
+	// 	Make an action message
+	//	Put into appropriate structs
+	//	Do any needed actions.
 
-	msg, msgErr := TryParseMessage(stream)
-	if msgErr != nil {
-		fmt.Println(msgErr)
-	} else {
-		msgKey := msg.MetaData.Sender + "/" + msg.MetaData.Topic
-		workItems.Messages[msgKey] = msg
+	action, actionErr := TryParseActionMessage(stream)
+	if actionErr != nil {
+		fmt.Println(actionErr)
+		return nil
+	}
+	return action
+}
+
+// ExecuteAction takes an action message and modifies the work queue as needed.
+func (workItems *WorkQueue) ExecuteAction(action *ActionMessage) {
+	// Handle doing what's needed
+	switch action.ActionType {
+	case ACTION_SUBSCRIBE:
+		workItems.AddSubscriber(action.Payload.MetaData.Sender, "", action.Payload.MetaData.Topic)
+	case ACTION_PUBLISH:
+		fmt.Println("TODO: Add a publish system")
 	}
 }
 
@@ -284,3 +312,53 @@ func (workItems *WorkQueue) prepareTrash() {
 
 //-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
+
+// ActionMessage functions
+
+//-----------------------------------------------------------------------------------------------
+
+// TryParseActionMessage receives a byte stream, tries to make an actionmessage from it.
+func TryParseActionMessage(stream []byte) (*ActionMessage, error) {
+	tempAction := new(ActionMessage)
+	parseErr := json.Unmarshal(stream, tempAction)
+	return tempAction, parseErr
+}
+
+// Init -- setup the instance to actually function.
+func (webAction *ActionMessage) Init(pump chan []byte) {
+	webAction.messagePump = pump
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// ActionMessage is serializable -- it has ToBytes and FromBytes
+
+// ToBytes -- to comply with the serializable interface.
+func (webAction *ActionMessage) ToBytes(clientID string) []byte {
+	return toBytes(webAction)
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// FromBytes is to comply with the Serializable interface.
+func (webAction *ActionMessage) FromBytes(stream []byte) {
+	tempAction := new(ActionMessage)
+
+	parseErr := json.Unmarshal(stream, tempAction)
+	if parseErr != nil {
+		fmt.Println("Could not deserialize ActionMessage")
+		return
+	}
+
+	webAction.ActionType = tempAction.ActionType
+	webAction.Payload = tempAction.Payload
+}
+
+// Identify creates an action message, which it then sends via the link.
+func (webAction *ActionMessage) Identify(clientID string) {
+	payload := NewMessage(clientID, "InternalControl", nil)
+	webAction.ActionType = ACTION_ID
+	webAction.Payload = *payload
+	buffer := toBytes(webAction)
+	webAction.messagePump <- buffer
+}
