@@ -58,6 +58,25 @@ func (webhook *Weblink) WriteText(message chan []byte) {
 	}
 }
 
+// RunActionListener listens for messages
+func (webhook *Weblink) RunActionListener(queueInsance *ActionQueue) {
+	for {
+		if webhook.Conn != nil {
+			messageType, p, err := webhook.Conn.ReadMessage()
+			if check(err) {
+				return
+			}
+			if messageType == websocket.TextMessage {
+				if len(p) > 1 {
+					// all things sent to us are messages?
+					msg := fromBytes(p)
+					queueInsance.ProcessMessage(msg)
+				}
+			}
+		}
+	}
+}
+
 // Close closes the weblink.
 func (webhook *Weblink) Close() {
 	webhook.Conn.Close()

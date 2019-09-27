@@ -3,7 +3,7 @@
 // This software is provided "AS-IS", and there are no warranties of any kind.  Use at your own risk.
 
 // package digdispatch is originally written to create a ROS style topic system for a robot rover.
-// The basic idea is that there are 2 different topics that any endpoint can publish/subscribe:
+// The basic idea is that there are different topics that any endpoint can publish/subscribe:
 //	One is to send commands to a robot, while the other is to send sensor data back to control agents.
 
 // Definitions:
@@ -14,6 +14,9 @@
 // Theory of operation:
 //	Robots and Controllers use a pub/sub model like ROS.  Nothing is a "service" in the ROS sense -- everything goes through this channel.
 // 	The same code will be on both Client and Server.
+
+// WorkQue is designed primarily for server work.
+// ActionQue is designed primarily for client work.
 
 // 	Due to network issues, a second go-routine manages the subscribition notifications.
 
@@ -76,9 +79,14 @@ type WorkQueue struct {
 
 // ActionMessage is a struct to simplify client/server communication
 type ActionMessage struct {
-	messagePump chan []byte // the actual message pump.
-	ActionType  int         // which action is this?
-	Payload     Message     // The needed data to handle the message.
+	ActionType int     // which action is this?
+	Payload    Message // The needed data to handle the message.
+}
+
+// ActionQueue is a struct to simplify internal client dispatches
+type ActionQueue struct {
+	messagePump   chan []byte // the actual message pump.
+	subscriptions map[string]func(msg *Message)
 }
 
 // Serializable requires that all message data can go to/from byte slices
@@ -324,11 +332,6 @@ func TryParseActionMessage(stream []byte) (*ActionMessage, error) {
 	return tempAction, parseErr
 }
 
-// Init -- setup the instance to actually function.
-func (webAction *ActionMessage) Init(pump chan []byte) {
-	webAction.messagePump = pump
-}
-
 //-----------------------------------------------------------------------------------------------
 
 // ActionMessage is serializable -- it has ToBytes and FromBytes
@@ -354,11 +357,65 @@ func (webAction *ActionMessage) FromBytes(stream []byte) {
 	webAction.Payload = tempAction.Payload
 }
 
-// Identify creates an action message, which it then sends via the link.
-func (webAction *ActionMessage) Identify(clientID string) {
-	payload := NewMessage(clientID, "InternalControl", nil)
-	webAction.ActionType = ACTION_ID
+//-----------------------------------------------------------------------------------------------
+
+func (webAction *ActionMessage) createPayload(Identity string, Topic string, Buffer []byte) {
+	payload := NewMessage(Identity, Topic, Buffer)
 	webAction.Payload = *payload
+}
+
+//-----------------------------------------------------------------------------------------------
+
+func (queueInsance *ActionQueue) sendMsg(webAction *ActionMessage) {
 	buffer := toBytes(webAction)
-	webAction.messagePump <- buffer
+	queueInsance.messagePump <- buffer
+	queueInsance.messagePump <- []byte("")
+
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// Init prepares the action queue for work
+func (queueInsance *ActionQueue) Init(massagePump chan []byte) {
+	queueInsance.messagePump = massagePump
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// Identify creates an action message, which it then sends via the link.
+func (queueInsance *ActionQueue) Identify(clientID string) {
+	webAction := new(ActionMessage)
+	webAction.ActionType = ACTION_ID
+	webAction.createPayload(clientID, "InternalControl", nil)
+	queueInsance.sendMsg(webAction)
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// Subscribe generates a subscription message and sends it to the service,
+// then holds a callback for those messages when receieved from a server.
+//	Notify -- that's the clientID for my caller
+//	Topic -- the topic the caller is interested in
+//	callback -- the function to call when the server pushes the right message to me
+func (queueInsance *ActionQueue) Subscribe(Notify string, Topic string, callback func(msg *Message)) {
+	// Create the action for the server and send it
+	webAction := new(ActionMessage)
+	webAction.ActionType = ACTION_SUBSCRIBE
+	webAction.createPayload(Notify, Topic, nil)
+	queueInsance.sendMsg(webAction)
+
+	// Add the callback to a process que
+	key := Notify + "/" + Topic
+	queueInsance.subscriptions[key] = callback
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// ProcessMessage a message by Generating a key, calling the correct function callback.
+func (queueInsance *ActionQueue) ProcessMessage(msg *Message) {
+	key := msg.MetaData.Sender + "/" + msg.MetaData.Topic
+	msg.Pickup()
+	if queueInsance.subscriptions[key] != nil {
+		queueInsance.subscriptions[key](msg)
+	}
 }
