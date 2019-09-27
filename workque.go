@@ -144,10 +144,10 @@ func (robot DriveCommand) ToBytes() []byte {
 //-----------------------------------------------------------------------------------------------
 
 // FromBytes finishes up the Serializable interface
-func (robot *DriveCommand) FromBytes(stream []byte) {
-	conversionErr := json.Unmarshal(stream, robot)
+func (robot DriveCommand) FromBytes(stream []byte) {
+	conversionErr := json.Unmarshal(stream, &robot)
 	if conversionErr != nil {
-		robot = new(DriveCommand) // we couldn't convert, so make a blank one.
+		robot = *new(DriveCommand) // we couldn't convert, so make a blank one.
 	}
 }
 
