@@ -11,7 +11,7 @@
 //	A "robot" is a client node with actuators and sensors.
 // 	A robot may be a controller for another robot or even itself.
 
-// Theory of operation:
+// Theory of operation:thisMessage.MetaData
 //	Robots and Controllers use a pub/sub model like ROS.  Nothing is a "service" in the ROS sense -- everything goes through this channel.
 // 	The same code will be on both Client and Server.
 
@@ -237,6 +237,16 @@ func (thisMessage *Message) Pickup() Message {
 }
 
 //-----------------------------------------------------------------------------------------------
+
+// Copy makes a copy of a message.
+func (thisMessage *Message) Copy(msg Message) {
+	copyMd := MessageMetaData{Sender: msg.MetaData.Sender, Topic: msg.MetaData.Topic, TemporalShake: msg.MetaData.TemporalShake, IsPickedUp: msg.MetaData.IsPickedUp}
+	copy := Message{MetaData: copyMd, MessageBuffer: thisMessage.MessageBuffer}
+	thisMessage.MetaData = copy.MetaData
+	thisMessage.MessageBuffer = copy.MessageBuffer
+}
+
+//-----------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------
 
 // WorkQue functions
@@ -284,8 +294,22 @@ func (workItems *WorkQueue) ExecuteAction(action *ActionMessage) {
 	case ACTION_SUBSCRIBE:
 		workItems.AddSubscriber(action.Payload.MetaData.Sender, "", action.Payload.MetaData.Topic)
 	case ACTION_PUBLISH:
-		fmt.Println("TODO: Add a publish system")
+		workItems.PublishActionMessage(action)
 	}
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// PublishActionMessage sets the various structs in the workque for the publisher go-routine.
+func (workItems *WorkQueue) PublishActionMessage(action *ActionMessage) {
+	// create a key, get the message pointer, point WorkQueue.Messages to it.
+	copiedMsg := new(Message)
+	copiedMsg.Copy(action.Payload) // so garbage collector will throw away the action message.
+	key := action.Payload.MetaData.Sender + "/" + action.Payload.MetaData.Topic
+	workItems.Messages[key] = copiedMsg
+
+	// update the publishers
+	workItems.Publishers[action.Payload.MetaData.Sender] = append(workItems.Publishers[action.Payload.MetaData.Sender], key)
 }
 
 //-----------------------------------------------------------------------------------------------
