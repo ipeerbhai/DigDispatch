@@ -34,6 +34,7 @@ package digdispatch
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 )
 
@@ -86,11 +87,12 @@ type ActionMessage struct {
 // ActionQueue is a struct to simplify internal client dispatches
 type ActionQueue struct {
 	messagePump   chan []byte // the actual message pump.
+	identity      string      // who am i?
 	subscriptions map[string]func(msg *Message)
 }
 
 // Serializable requires that all message data can go to/from byte slices
-type Serializable *interface {
+type Serializable interface {
 	ToBytes() []byte
 	FromBytes([]byte)
 }
@@ -135,7 +137,7 @@ func fromBytes(stream []byte) *Message {
 //-----------------------------------------------------------------------------------------------
 
 // ToBytes required
-func (robot *DriveCommand) ToBytes() []byte {
+func (robot DriveCommand) ToBytes() []byte {
 	return toBytes(robot)
 }
 
@@ -366,28 +368,30 @@ func (webAction *ActionMessage) createPayload(Identity string, Topic string, Buf
 
 //-----------------------------------------------------------------------------------------------
 
-func (queueInsance *ActionQueue) sendMsg(webAction *ActionMessage) {
+func (queueInstance *ActionQueue) sendMsg(webAction *ActionMessage) {
 	buffer := toBytes(webAction)
-	queueInsance.messagePump <- buffer
-	queueInsance.messagePump <- []byte("")
+	queueInstance.messagePump <- buffer
+	queueInstance.messagePump <- []byte("")
 
 }
 
 //-----------------------------------------------------------------------------------------------
 
 // Init prepares the action queue for work
-func (queueInsance *ActionQueue) Init(massagePump chan []byte) {
-	queueInsance.messagePump = massagePump
+func (queueInstance *ActionQueue) Init(massagePump chan []byte) {
+	queueInstance.messagePump = massagePump
+	queueInstance.subscriptions = make(map[string]func(msg *Message))
 }
 
 //-----------------------------------------------------------------------------------------------
 
 // Identify creates an action message, which it then sends via the link.
-func (queueInsance *ActionQueue) Identify(clientID string) {
+func (queueInstance *ActionQueue) Identify(clientID string) {
+	queueInstance.identity = clientID
 	webAction := new(ActionMessage)
 	webAction.ActionType = ACTION_ID
 	webAction.createPayload(clientID, "InternalControl", nil)
-	queueInsance.sendMsg(webAction)
+	queueInstance.sendMsg(webAction)
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -397,25 +401,45 @@ func (queueInsance *ActionQueue) Identify(clientID string) {
 //	Notify -- that's the clientID for my caller
 //	Topic -- the topic the caller is interested in
 //	callback -- the function to call when the server pushes the right message to me
-func (queueInsance *ActionQueue) Subscribe(Notify string, Topic string, callback func(msg *Message)) {
+func (queueInstance *ActionQueue) Subscribe(Notify string, Topic string, callback func(msg *Message)) {
 	// Create the action for the server and send it
 	webAction := new(ActionMessage)
 	webAction.ActionType = ACTION_SUBSCRIBE
 	webAction.createPayload(Notify, Topic, nil)
-	queueInsance.sendMsg(webAction)
+	queueInstance.sendMsg(webAction)
 
 	// Add the callback to a process que
-	key := Notify + "/" + Topic
-	queueInsance.subscriptions[key] = callback
+	if callback != nil {
+		key := Notify + "/" + Topic
+		queueInstance.subscriptions[key] = callback
+
+	}
 }
 
 //-----------------------------------------------------------------------------------------------
 
 // ProcessMessage a message by Generating a key, calling the correct function callback.
-func (queueInsance *ActionQueue) ProcessMessage(msg *Message) {
+func (queueInstance *ActionQueue) ProcessMessage(msg *Message) {
+	if msg == nil {
+		return
+	}
 	key := msg.MetaData.Sender + "/" + msg.MetaData.Topic
 	msg.Pickup()
-	if queueInsance.subscriptions[key] != nil {
-		queueInsance.subscriptions[key](msg)
+	if queueInstance.subscriptions[key] != nil {
+		queueInstance.subscriptions[key](msg)
 	}
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// PublishMessage actually publishes the message...
+func (queueInstance *ActionQueue) PublishMessage(msg Serializable) {
+	// create the action message and indicate it's a publish message.
+	aMsg := new(ActionMessage)
+	aMsg.ActionType = ACTION_PUBLISH
+
+	// Get the type of the msg sent to me, and make the type name the topic.
+	typeName := reflect.TypeOf(msg).Name()
+	aMsg.createPayload(queueInstance.identity, typeName, msg.ToBytes())
+	queueInstance.sendMsg(aMsg)
 }
