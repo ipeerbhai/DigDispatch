@@ -241,9 +241,11 @@ func (thisMessage *Message) Pickup() Message {
 // Copy makes a copy of a message.
 func (thisMessage *Message) Copy(msg Message) {
 	copyMd := MessageMetaData{Sender: msg.MetaData.Sender, Topic: msg.MetaData.Topic, TemporalShake: msg.MetaData.TemporalShake, IsPickedUp: msg.MetaData.IsPickedUp}
-	copy := Message{MetaData: copyMd, MessageBuffer: thisMessage.MessageBuffer}
-	thisMessage.MetaData = copy.MetaData
-	thisMessage.MessageBuffer = copy.MessageBuffer
+	copyBuffer := make([]byte, len(msg.MessageBuffer))
+	copy(copyBuffer, msg.MessageBuffer)
+	copied := Message{MetaData: copyMd, MessageBuffer: copyBuffer}
+	thisMessage.MetaData = copied.MetaData
+	thisMessage.MessageBuffer = copied.MessageBuffer
 }
 
 //-----------------------------------------------------------------------------------------------
