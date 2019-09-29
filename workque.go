@@ -268,7 +268,10 @@ func (workItems *WorkQueue) Init() bool {
 
 // AddSubscriber adds a subscriber to the list of who to notify when.
 func (workItems *WorkQueue) AddSubscriber(Notify string, From string, Topic string) {
-	SubScriptionTopic := From + "/" + Topic
+	if len(From) > 1 {
+		Topic = From + "/" + Topic
+	}
+	SubScriptionTopic := Topic
 	workItems.Subscribers[Notify] = append(workItems.Subscribers[Notify], SubScriptionTopic)
 }
 
@@ -436,7 +439,7 @@ func (queueInstance *ActionQueue) Subscribe(Notify string, Topic string, callbac
 
 	// Add the callback to a process que
 	if callback != nil {
-		key := Notify + "/" + Topic
+		key := Topic
 		queueInstance.subscriptions[key] = callback
 
 	}
