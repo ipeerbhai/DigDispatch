@@ -228,12 +228,10 @@ func TryParseMessage(byteStream []byte) (*Message, error) {
 //-----------------------------------------------------------------------------------------------
 
 // Pickup sets the pickup time of a message
-func (thisMessage *Message) Pickup() Message {
-	retValue := Message{MetaData: thisMessage.MetaData, MessageBuffer: thisMessage.MessageBuffer}
-	retValue.MetaData.TemporalShake.AcknowledgedTime = time.Now()
-	retValue.MetaData.IsPickedUp = true
-
-	return retValue
+func (thisMessage *Message) Pickup() {
+	thisMessage.MetaData.TemporalShake.AcknowledgedTime = time.Now()
+	thisMessage.MetaData.IsPickedUp = true
+	return
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -315,20 +313,6 @@ func (workItems *WorkQueue) PublishActionMessage(action *ActionMessage) {
 
 	// update the publishers
 	workItems.Publishers[action.Payload.MetaData.Sender] = append(workItems.Publishers[action.Payload.MetaData.Sender], key)
-}
-
-//-----------------------------------------------------------------------------------------------
-
-// PickupMessagesForSubscriber checks the queue for any messages the subscriber has, returns a slice of them.
-func (workItems *WorkQueue) PickupMessagesForSubscriber(subscriber string) []Message {
-	retMessages := []Message{} // a blank return message.
-
-	if topics, topicFound := workItems.Subscribers[subscriber]; topicFound {
-		for _, topic := range topics {
-			retMessages = append(retMessages, workItems.Messages[topic].Pickup())
-		}
-	}
-	return retMessages
 }
 
 //-----------------------------------------------------------------------------------------------
