@@ -340,8 +340,11 @@ func (workItems *WorkQueue) prepareTrash() {
 		// find all messages.
 		for k, msgPtr := range workItems.Messages {
 			if msgPtr.MetaData.IsPickedUp {
-				// delete the item
-				workItems.Messages[k] = nil
+				// check the pickup time, delete the item if it's been at least 3 seconds
+				now := time.Now()
+				if now.Sub(msgPtr.MetaData.TemporalShake.AcknowledgedTime).Seconds() >= 3 {
+					workItems.Messages[k] = nil
+				}
 			}
 		}
 		// sleep this go-routine for 2 seconds
