@@ -231,17 +231,25 @@ func TryParseMessage(byteStream []byte) (*Message, error) {
 // Pickup sets the pickup time of a message, determines if this string is already in the pickup table.
 func (thisMessage *Message) Pickup(who string) bool {
 	retVal := false
-	thisMessage.MetaData.TemporalShake.AcknowledgedTime = time.Now()
-	thisMessage.MetaData.IsPickedUp = true
 	if thisMessage.MetaData.pickupList != nil {
 		// iterate through the pickup list and see if we've got this who in it.
 		for _, v := range thisMessage.MetaData.pickupList {
 			if v == who {
 				retVal = true
+				// how long ago was this picked up?
+
+				if time.Now().Sub(thisMessage.MetaData.TemporalShake.AcknowledgedTime).Seconds() >= 2 {
+					// it's really old -- we should delete this message.
+					thisMessage = nil
+				}
 				return retVal // no need to append -- we already know...
 			}
 		}
 	}
+	// Mark this as picked up.
+	thisMessage.MetaData.TemporalShake.AcknowledgedTime = time.Now()
+	thisMessage.MetaData.IsPickedUp = true
+
 	thisMessage.MetaData.pickupList = append(thisMessage.MetaData.pickupList, who)
 	return retVal
 }
