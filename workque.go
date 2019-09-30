@@ -42,7 +42,7 @@ import (
 //-----------------------------------------------------------------------------------------------
 
 const (
-	ACTION_ID        = iota
+	ACTION_ID        = iota // ACTION_ID == The "identify" action
 	ACTION_SUBSCRIBE = iota
 	ACTION_PUBLISH   = iota
 )
@@ -63,6 +63,7 @@ type MessageMetaData struct {
 	Topic         string    // What are we informing?
 	TemporalShake TimeShake // when did things happen?
 	IsPickedUp    bool      // Has this been picked up?
+	pickupList    []string  // What subscribers have been given this already?
 }
 
 // Message is the interchange type.  Everything should .
@@ -227,11 +228,22 @@ func TryParseMessage(byteStream []byte) (*Message, error) {
 
 //-----------------------------------------------------------------------------------------------
 
-// Pickup sets the pickup time of a message
-func (thisMessage *Message) Pickup() {
+// Pickup sets the pickup time of a message, determines if this string is already in the pickup table.
+func (thisMessage *Message) Pickup(who string) bool {
+	retVal := false
 	thisMessage.MetaData.TemporalShake.AcknowledgedTime = time.Now()
 	thisMessage.MetaData.IsPickedUp = true
-	return
+	if thisMessage.MetaData.pickupList != nil {
+		// iterate through the pickup list and see if we've got this who in it.
+		for _, v := range thisMessage.MetaData.pickupList {
+			if v == who {
+				retVal = true
+				return retVal // no need to append -- we already know...
+			}
+		}
+	}
+	thisMessage.MetaData.pickupList = append(thisMessage.MetaData.pickupList, who)
+	return retVal
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -323,11 +335,13 @@ func (workItems *WorkQueue) prepareTrash() {
 	for {
 		// find all messages.
 		for k, msgPtr := range workItems.Messages {
-			if msgPtr.MetaData.IsPickedUp {
-				// check the pickup time, delete the item if it's been at least 3 seconds
-				now := time.Now()
-				if now.Sub(msgPtr.MetaData.TemporalShake.AcknowledgedTime).Seconds() >= 3 {
-					workItems.Messages[k] = nil
+			if msgPtr != nil {
+				if msgPtr.MetaData.IsPickedUp {
+					// check the pickup time, delete the item if it's been at least 3 seconds
+					now := time.Now()
+					if now.Sub(msgPtr.MetaData.TemporalShake.AcknowledgedTime).Seconds() >= 3 {
+						workItems.Messages[k] = nil
+					}
 				}
 			}
 		}
@@ -440,7 +454,6 @@ func (queueInstance *ActionQueue) ProcessMessage(msg *Message) {
 		return
 	}
 	key := msg.MetaData.Sender + "/" + msg.MetaData.Topic
-	msg.Pickup()
 	if queueInstance.subscriptions[key] != nil {
 		queueInstance.subscriptions[key](msg)
 	}
