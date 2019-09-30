@@ -270,7 +270,6 @@ func (workItems *WorkQueue) Init() bool {
 	workItems.Subscribers = make(NetworkedTopicMap, 0)
 	workItems.Messages = make(map[string]*Message, 0)
 
-	go workItems.prepareTrash()
 	return true
 }
 
@@ -325,29 +324,6 @@ func (workItems *WorkQueue) PublishActionMessage(action *ActionMessage) {
 
 	// update the publishers
 	workItems.Publishers[action.Payload.MetaData.Sender] = append(workItems.Publishers[action.Payload.MetaData.Sender], key)
-}
-
-//-----------------------------------------------------------------------------------------------
-
-// prepareTrash is not an exported function, and it constantly reshapes the que to attempt to delete picked up messages
-func (workItems *WorkQueue) prepareTrash() {
-	// always run
-	for {
-		// find all messages.
-		for k, msgPtr := range workItems.Messages {
-			if msgPtr != nil {
-				if msgPtr.MetaData.IsPickedUp {
-					// check the pickup time, delete the item if it's been at least 3 seconds
-					now := time.Now()
-					if now.Sub(msgPtr.MetaData.TemporalShake.AcknowledgedTime).Seconds() >= 3 {
-						workItems.Messages[k] = nil
-					}
-				}
-			}
-		}
-		// sleep this go-routine for 2 seconds
-		time.Sleep(2 * time.Second)
-	}
 }
 
 //-----------------------------------------------------------------------------------------------
