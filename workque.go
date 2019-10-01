@@ -437,10 +437,20 @@ func (queueInstance *ActionQueue) ProcessMessage(msg *Message) {
 	if msg == nil {
 		return
 	}
-	key := msg.MetaData.Sender + "/" + msg.MetaData.Topic
-	if queueInstance.subscriptions[key] != nil {
-		queueInstance.subscriptions[key](msg)
+	keyList := []string{"*", msg.MetaData.Sender}
+	for _, possibleKey := range keyList {
+		key := possibleKey + "/" + msg.MetaData.Topic
+		if queueInstance.subscriptions[key] != nil {
+			queueInstance.subscriptions[key](msg)
+		}
 	}
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// AddCallback adds a callback to the subscription queue.
+func (queueInstance *ActionQueue) AddCallback(key string, callback func(msg *Message)) {
+	queueInstance.subscriptions[key] = callback
 }
 
 //-----------------------------------------------------------------------------------------------
