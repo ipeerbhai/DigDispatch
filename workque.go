@@ -437,7 +437,7 @@ func (queueInstance *ActionQueue) ProcessMessage(msg *Message) {
 	if msg == nil {
 		return
 	}
-	keyList := []string{"*", msg.MetaData.Sender}
+	keyList := []string{"", msg.MetaData.Sender}
 	for _, possibleKey := range keyList {
 		key := possibleKey + "/" + msg.MetaData.Topic
 		if queueInstance.subscriptions[key] != nil {
