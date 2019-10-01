@@ -289,7 +289,23 @@ func (workItems *WorkQueue) AddSubscriber(Notify string, From string, Topic stri
 		Topic = From + "/" + Topic
 	}
 	SubScriptionTopic := Topic
-	workItems.Subscribers[Notify] = append(workItems.Subscribers[Notify], SubScriptionTopic)
+	// Can only add topics that aren't already subscribed.
+	// TODO: Make this more efficient.
+	foundDuplicate := false
+	if workItems.Subscribers[Notify] != nil {
+		for _, v := range workItems.Subscribers[Notify] {
+			if v == SubScriptionTopic {
+				foundDuplicate = true
+			}
+		}
+
+		if !foundDuplicate {
+			workItems.Subscribers[Notify] = append(workItems.Subscribers[Notify], SubScriptionTopic)
+		}
+
+	} else {
+		workItems.Subscribers[Notify] = append(workItems.Subscribers[Notify], SubScriptionTopic)
+	}
 }
 
 //-----------------------------------------------------------------------------------------------
