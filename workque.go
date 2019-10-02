@@ -231,6 +231,13 @@ func TryParseMessage(byteStream []byte) (*Message, error) {
 // Pickup sets the pickup time of a message, determines if this string is already in the pickup table.
 func (thisMessage *Message) Pickup(who string) bool {
 	retVal := false
+	// we're already picked up and purged if we are nil.
+	if thisMessage == nil {
+		return true
+	}
+
+	// check the pickup list, try and purge ourselves if every reference / timeout happens.
+
 	if thisMessage.MetaData.pickupList != nil {
 		// iterate through the pickup list and see if we've got this who in it.
 		for _, v := range thisMessage.MetaData.pickupList {
