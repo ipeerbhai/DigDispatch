@@ -94,7 +94,7 @@ type ActionMessage struct {
 type ActionQueue struct {
 	messagePump   chan []byte // the actual message pump.
 	identity      string      // who am i?
-	subscriptions map[string]func(msg *Message)
+	subscriptions map[string]func(msg *Message, params ...interface{})
 }
 
 // Serializable requires that all message data can go to/from byte slices
@@ -417,7 +417,7 @@ func (queueInstance *ActionQueue) sendMsg(webAction *ActionMessage) {
 // Init prepares the action queue for work
 func (queueInstance *ActionQueue) Init(massagePump chan []byte) {
 	queueInstance.messagePump = massagePump
-	queueInstance.subscriptions = make(map[string]func(msg *Message))
+	queueInstance.subscriptions = make(map[string]func(msg *Message, params ...interface{}))
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -438,7 +438,7 @@ func (queueInstance *ActionQueue) Identify(clientID string) {
 //	Notify -- that's the clientID for my caller
 //	Topic -- the topic the caller is interested in
 //	callback -- the function to call when the server pushes the right message to me
-func (queueInstance *ActionQueue) Subscribe(Notify string, Topic string, callback func(msg *Message)) {
+func (queueInstance *ActionQueue) Subscribe(Notify string, Topic string, callback func(msg *Message, params ...interface{})) {
 	// Create the action for the server and send it
 	webAction := new(ActionMessage)
 	webAction.ActionType = ACTION_SUBSCRIBE
@@ -472,7 +472,7 @@ func (queueInstance *ActionQueue) ProcessMessage(msg *Message) {
 //-----------------------------------------------------------------------------------------------
 
 // AddCallback adds a callback to the subscription queue.
-func (queueInstance *ActionQueue) AddCallback(key string, callback func(msg *Message)) {
+func (queueInstance *ActionQueue) AddCallback(key string, callback func(msg *Message, params ...interface{})) {
 	queueInstance.subscriptions[key] = callback
 }
 
