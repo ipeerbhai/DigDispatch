@@ -47,6 +47,11 @@ const (
 	ACTION_PUBLISH   = iota
 )
 
+const (
+	DRIVE_SET = iota // reciever should set physical motors to this state.
+	DRIVE_GET = iota // reciever should report the motor state to UX.
+)
+
 // NetworkedTopicMap represents nodes in a connection graph and what topics those nodes want notifications for.
 type NetworkedTopicMap map[string][]string
 
@@ -105,6 +110,7 @@ type DriveCommand struct {
 
 // DriveState is a serializable information struct, sent from robot to the controller.
 type DriveState struct {
+	Direction       int // is this a set ( 0 ) or a get ( 1 )
 	LeftMotorPower  int // from -100 .. 100, % power to left motor.
 	RightMotorPower int // same as left
 }
@@ -155,21 +161,15 @@ func (robot DriveCommand) FromBytes(stream []byte) {
 //-----------------------------------------------------------------------------------------------
 
 // ToBytes calls a "generic" serializer.
-func (robot *DriveState) ToBytes() []byte {
+func (robot DriveState) ToBytes() []byte {
 	return toBytes(robot)
 }
 
-//-----------------------------------------------------------------------------------------------
-
-// FromBytes converts back to the struct
-func (robot *DriveState) FromBytes(stream []byte) {
-	// 2 steps -- get the message, then the payload
-	msg := fromBytes(stream)
-	if msg != nil {
-		payloadErr := json.Unmarshal(msg.MessageBuffer, robot)
-		if payloadErr != nil {
-			fmt.Println(payloadErr)
-		}
+// FromBytes finishes up the Serializable interface
+func (robot DriveState) FromBytes(stream []byte) {
+	conversionErr := json.Unmarshal(stream, &robot)
+	if conversionErr != nil {
+		robot = *new(DriveState) // we couldn't convert, so make a blank one.
 	}
 }
 
