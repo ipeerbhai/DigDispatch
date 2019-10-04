@@ -7,6 +7,7 @@ package digdispatch
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/gorilla/websocket"
@@ -43,8 +44,8 @@ func (webhook *Weblink) Init(webServer string) {
 }
 
 // Connect starts the Connection
-func (webhook *Weblink) Connect() {
-	conn, _, err := websocket.DefaultDialer.Dial(webhook.URL.String(), nil)
+func (webhook *Weblink) Connect(header http.Header) {
+	conn, _, err := websocket.DefaultDialer.Dial(webhook.URL.String(), header)
 	check(err)
 	webhook.Conn = conn
 }
