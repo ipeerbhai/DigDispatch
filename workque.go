@@ -79,7 +79,7 @@ type Message struct {
 
 // WorkQueue actually manages what each robot is doing/saying...
 type WorkQueue struct {
-	Publishers  NetworkedTopicMap   // A map of connected IDs and a list of topics they will publish
+	Publishers  map[string]time.Time   // A map of connected IDs and a list of topics they will publish
 	Subscribers NetworkedTopicMap   // A map of connected IDs and a list what topics they want messages about.
 	Messages    map[string]*Message // all messages from all robots, key is catenation  of (sender+topic)
 	IsLocked    bool                // Is the queue locked right now?
@@ -282,7 +282,7 @@ func (thisMessage *Message) Copy(msg Message) {
 
 // Init initializes all the information we need.
 func (workItems *WorkQueue) Init() bool {
-	workItems.Publishers = make(NetworkedTopicMap, 0)
+	workItems.Publishers = make(map[string]time.Time, 0)
 	workItems.Subscribers = make(NetworkedTopicMap, 0)
 	workItems.Messages = make(map[string]*Message, 0)
 
@@ -357,10 +357,11 @@ func (workItems *WorkQueue) PublishActionMessage(action *ActionMessage) {
 		workItems.IsLocked = true
 		workItems.Messages[key] = copiedMsg
 		workItems.IsLocked = false
+		break
 	}
 
 	// update the publishers
-	workItems.Publishers[action.Payload.MetaData.Sender] = append(workItems.Publishers[action.Payload.MetaData.Sender], key)
+	workItems.Publishers[action.Payload.MetaData.Sender] = action.Payload.MetaData.TemporalShake.EnquedTime
 }
 
 //-----------------------------------------------------------------------------------------------
