@@ -82,6 +82,7 @@ type WorkQueue struct {
 	Publishers  NetworkedTopicMap   // A map of connected IDs and a list of topics they will publish
 	Subscribers NetworkedTopicMap   // A map of connected IDs and a list what topics they want messages about.
 	Messages    map[string]*Message // all messages from all robots, key is catenation  of (sender+topic)
+	IsLocked    bool                // Is the queue locked right now?
 }
 
 // ActionMessage is a struct to simplify client/server communication
@@ -351,7 +352,12 @@ func (workItems *WorkQueue) PublishActionMessage(action *ActionMessage) {
 	copiedMsg := new(Message)
 	copiedMsg.Copy(action.Payload) // so garbage collector will throw away the action message.
 	key := action.Payload.MetaData.Sender + "/" + action.Payload.MetaData.Topic
-	workItems.Messages[key] = copiedMsg
+	// we need to lock the queue to ensure we aren't trying to read/write at the same time.
+	for !workItems.IsLocked {
+		workItems.IsLocked = true
+		workItems.Messages[key] = copiedMsg
+		workItems.IsLocked = false
+	}
 
 	// update the publishers
 	workItems.Publishers[action.Payload.MetaData.Sender] = append(workItems.Publishers[action.Payload.MetaData.Sender], key)
