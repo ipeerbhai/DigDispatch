@@ -5,7 +5,6 @@
 package digdispatch
 
 import (
-	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -34,16 +33,11 @@ type Weblink struct {
 
 // Init initializes the type/struct
 func (webhook *Weblink) Init(webServer string) {
-	var server string
-	if flag.Lookup("server") == nil {
-		flag.StringVar(&server, "server", webServer, "server address")
-	}
 	webhook.URL = url.URL{
 		Scheme: "ws",
-		Host:   server,
+		Host:   webServer,
 		Path:   "/ws",
 	}
-
 }
 
 // Connect starts the Connection
