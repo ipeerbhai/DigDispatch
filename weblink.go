@@ -34,10 +34,13 @@ type Weblink struct {
 
 // Init initializes the type/struct
 func (webhook *Weblink) Init(webServer string) {
-	var server = flag.String("server", webServer, "server address")
+	var server string
+	if flag.Lookup("server") == nil {
+		flag.StringVar(&server, "server", webServer, "server address")
+	}
 	webhook.URL = url.URL{
 		Scheme: "ws",
-		Host:   *server,
+		Host:   server,
 		Path:   "/ws",
 	}
 
