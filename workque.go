@@ -77,12 +77,19 @@ type Message struct {
 	MessageBuffer []byte          // the message itself
 }
 
+// PublishMessage manages new publications
+type PublishMessage struct {
+	PublishedTopic string   // who is the publisher of this message?
+	MessageData    *Message // what's the message?
+}
+
 // WorkQueue actually manages what each robot is doing/saying...
 type WorkQueue struct {
-	Publishers  map[string]time.Time   // A map of connected IDs and a list of topics they will publish
-	Subscribers NetworkedTopicMap   // A map of connected IDs and a list what topics they want messages about.
-	Messages    map[string]*Message // all messages from all robots, key is catenation  of (sender+topic)
-	IsLocked    bool                // Is the queue locked right now?
+	PublishQueue   []PublishMessage     // a FIFO queue of messages we need to reduce, generate a single message for
+	PublishChannel chan PublishMessage  // a channel used to handle produce/drain of published messages
+	Publishers     map[string]time.Time // A map of connected IDs and a list of topics they will publish
+	Subscribers    NetworkedTopicMap    // A map of connected IDs and a list what topics they want messages about.
+	Messages       map[string]*Message  // all messages from all robots, key is catenation  of (sender+topic)
 }
 
 // ActionMessage is a struct to simplify client/server communication
@@ -285,7 +292,8 @@ func (workItems *WorkQueue) Init() bool {
 	workItems.Publishers = make(map[string]time.Time, 0)
 	workItems.Subscribers = make(NetworkedTopicMap, 0)
 	workItems.Messages = make(map[string]*Message, 0)
-
+	workItems.PublishQueue = make([]PublishMessage, 0)
+	workItems.PublishChannel = make(chan PublishMessage)
 	return true
 }
 
@@ -346,22 +354,18 @@ func (workItems *WorkQueue) ExecuteAction(action *ActionMessage) {
 
 //-----------------------------------------------------------------------------------------------
 
-// PublishActionMessage sets the various structs in the workque for the publisher go-routine.
+// PublishActionMessage sets the various structs in the workque for the drainer go-routine.
+// WARNING: this routine is meant for services with a reducer goroutine to drain the queue!  Do not call this from a client!!
+// This function blocks until a reducer picks up the publish message, and will stall the calling thread.
 func (workItems *WorkQueue) PublishActionMessage(action *ActionMessage) {
 	// create a key, get the message pointer, point WorkQueue.Messages to it.
 	copiedMsg := new(Message)
 	copiedMsg.Copy(action.Payload) // so garbage collector will throw away the action message.
 	key := action.Payload.MetaData.Sender + "/" + action.Payload.MetaData.Topic
-	// we need to lock the queue to ensure we aren't trying to read/write at the same time.
-	for !workItems.IsLocked {
-		workItems.IsLocked = true
-		workItems.Messages[key] = copiedMsg
-		workItems.IsLocked = false
-		break
-	}
 
-	// update the publishers
-	workItems.Publishers[action.Payload.MetaData.Sender] = action.Payload.MetaData.TemporalShake.EnquedTime
+	// Publish the message via a channel.  Warning, this is thread blocking.
+	publishThis := PublishMessage{PublishedTopic: key, MessageData: copiedMsg}
+	workItems.PublishChannel <- publishThis
 }
 
 //-----------------------------------------------------------------------------------------------
