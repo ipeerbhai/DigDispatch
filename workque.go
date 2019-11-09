@@ -36,6 +36,8 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/enriquebris/goconcurrentqueue"
 )
 
 //-----------------------------------------------------------------------------------------------
@@ -51,6 +53,9 @@ const (
 	DRIVE_SET = iota // reciever should set physical motors to this state.
 	DRIVE_GET = iota // reciever should report the motor state to UX.
 )
+
+// MessageQueue is a structure to handle inbound messages if a queue is needed.
+var MessageQueue *goconcurrentqueue.FIFO
 
 // NetworkedTopicMap represents nodes in a connection graph and what topics those nodes want notifications for.
 type NetworkedTopicMap map[string][]string
@@ -85,9 +90,8 @@ type PublishMessage struct {
 
 // WorkQueue actually manages what each robot is doing/saying...
 type WorkQueue struct {
-	PublishQueue   []PublishMessage     // a FIFO queue of messages we need to reduce, generate a single message for
 	PublishChannel chan PublishMessage  // a channel used to handle produce/drain of published messages
-	Publishers     map[string]time.Time // A map of connected IDs and a list of topics they will publish
+	Publishers     map[string]time.Time // A map of connected IDs and when they last published
 	Subscribers    NetworkedTopicMap    // A map of connected IDs and a list what topics they want messages about.
 	Messages       map[string]*Message  // all messages from all robots, key is catenation  of (sender+topic)
 }
@@ -109,6 +113,13 @@ type ActionQueue struct {
 type Serializable interface {
 	ToBytes() []byte
 	FromBytes([]byte)
+}
+
+// Reducable aka "reduce-able" is a way for a message to collapse an array to a single element.
+type Reducable interface {
+	AddToReductionQueue(element interface{})
+	AddManyToReductionQueue(list []interface{})
+	Reduce()
 }
 
 // DriveCommand is Serializable, sent from controllers to robots.
@@ -292,8 +303,8 @@ func (workItems *WorkQueue) Init() bool {
 	workItems.Publishers = make(map[string]time.Time, 0)
 	workItems.Subscribers = make(NetworkedTopicMap, 0)
 	workItems.Messages = make(map[string]*Message, 0)
-	workItems.PublishQueue = make([]PublishMessage, 0)
 	workItems.PublishChannel = make(chan PublishMessage)
+	MessageQueue = goconcurrentqueue.NewFIFO()
 	return true
 }
 
