@@ -80,7 +80,11 @@ func (webhook *Weblink) RunActionListener(queueInsance *ActionQueue) {
 		if webhook.Conn != nil {
 			messageType, p, err := webhook.Conn.ReadMessage()
 			if check(err) {
-				return
+				webhook.TryReconnect()
+				messageType, p, err = webhook.Conn.ReadMessage()
+				if check(err) {
+					return
+				}
 			}
 			if messageType == websocket.TextMessage {
 				if len(p) > 1 {
