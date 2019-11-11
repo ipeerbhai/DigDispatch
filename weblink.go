@@ -29,6 +29,7 @@ type Weblink struct {
 	SecurityToken string          // a random GUID we need to always transmit on each command.
 	URL           url.URL         // Whereto?
 	Conn          *websocket.Conn // Let's keep this connection alive...
+	header        http.Header     // to hold the header we get during a connection attempt.
 }
 
 // Init initializes the type/struct
@@ -40,11 +41,17 @@ func (webhook *Weblink) Init(webServer string) {
 	}
 }
 
-// Connect starts the Connection
-func (webhook *Weblink) Connect(header http.Header) {
-	conn, _, err := websocket.DefaultDialer.Dial(webhook.URL.String(), header)
+// memberConnect is unexported, and is used to hold what's needed to reconnect.
+func (webhook *Weblink) memberConnect() {
+	conn, _, err := websocket.DefaultDialer.Dial(webhook.URL.String(), webhook.header)
 	check(err)
 	webhook.Conn = conn
+}
+
+// Connect starts the Connection
+func (webhook *Weblink) Connect(header http.Header) {
+	webhook.header = header
+	webhook.memberConnect()
 }
 
 // WriteText sends a text message to the server
@@ -52,8 +59,19 @@ func (webhook *Weblink) WriteText(message chan []byte) {
 	for {
 		data, _ := <-message // channel reads have a tuple of the payload and an opened state always in channels.
 		err := webhook.Conn.WriteMessage(websocket.TextMessage, data)
-		check(err)
+		if err != nil {
+			// we might have a dropped connection.  Let's reconnect if possible, try again.
+			webhook.TryReconnect()
+			err = webhook.Conn.WriteMessage(websocket.TextMessage, data)
+			check(err)
+		}
 	}
+}
+
+// TryReconnect attempts to recontact a server if the connection is broken
+func (webhook *Weblink) TryReconnect() {
+	webhook.Conn.Close()
+	webhook.memberConnect()
 }
 
 // RunActionListener listens for messages
