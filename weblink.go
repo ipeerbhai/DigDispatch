@@ -13,11 +13,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// LocalIP is used to store local IP address in case we're called again.
+var LocalIP string
+
 // weblink is an HTTP bridge between some webhook and the local machine.
 //-----------------------------------------------------------------------------------------------
 
 // GetLocalIP returns the non loopback local IP of the host
 func GetLocalIP() string {
+	if len(LocalIP) > 5 {
+		return LocalIP
+	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return ""
@@ -26,7 +32,8 @@ func GetLocalIP() string {
 		// check the address type and if it is not a loopback the display it
 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
+				LocalIP = ipnet.IP.String()
+				return LocalIP
 			}
 		}
 	}

@@ -47,6 +47,7 @@ const (
 	ACTION_ID        = iota // ACTION_ID == The "identify" action
 	ACTION_SUBSCRIBE = iota
 	ACTION_PUBLISH   = iota
+	ACTION_REQUEST   = iota // message is a request from client
 )
 
 const (
@@ -92,20 +93,22 @@ type PublishMessage struct {
 type WorkQueue struct {
 	PublishChannel chan PublishMessage  // a channel used to handle produce/drain of published messages
 	Publishers     map[string]time.Time // A map of connected IDs and when they last published
+	IDList         map[string]Identity  // a map of client names to their full identity
 	Subscribers    NetworkedTopicMap    // A map of connected IDs and a list what topics they want messages about.
 	Messages       map[string]*Message  // all messages from all robots, key is catenation  of (sender+topic)
 }
 
 // ActionMessage is a struct to simplify client/server communication
 type ActionMessage struct {
-	ActionType int     // which action is this?
-	Payload    Message // The needed data to handle the message.
+	ActionType int      // which action is this?
+	Sender     Identity // the full identity of the sender
+	Payload    Message  // The needed data to handle the message.
 }
 
 // Identity describes an endpoint
 type Identity struct {
 	Name      string // What's the name of this object?  Can be a model number.
-	LocalIPV4 string // what's the localnet IP of the object?
+	LocalIP string // what's the localnet IP of the object?
 }
 
 // ActionQueue is a struct to simplify internal client dispatches
@@ -454,8 +457,10 @@ func (queueInstance *ActionQueue) Init(messagePump chan []byte) {
 // Identify creates an action message, which it then sends via the link.
 func (queueInstance *ActionQueue) Identify(clientID string, localIP string) {
 	queueInstance.identity.Name = clientID
-	queueInstance.identity.LocalIPV4 = localIP
+	queueInstance.identity.LocalIP = localIP
 	webAction := new(ActionMessage)
+	webAction.Sender.Name = clientID
+	webAction.Sender.LocalIP = localIP
 	webAction.ActionType = ACTION_ID
 	webAction.createPayload(clientID, "InternalControl", nil)
 	queueInstance.sendMsg(webAction)
