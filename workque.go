@@ -102,10 +102,16 @@ type ActionMessage struct {
 	Payload    Message // The needed data to handle the message.
 }
 
+// Identity describes an endpoint
+type Identity struct {
+	Name      string // What's the name of this object?  Can be a model number.
+	LocalIPV4 string // what's the localnet IP of the object?
+}
+
 // ActionQueue is a struct to simplify internal client dispatches
 type ActionQueue struct {
 	messagePump   chan []byte // the actual message pump.
-	identity      string      // who am i?
+	identity      Identity    // who am i?
 	subscriptions map[string]func(msg *Message, params ...interface{})
 }
 
@@ -437,16 +443,18 @@ func (queueInstance *ActionQueue) sendMsg(webAction *ActionMessage) {
 //-----------------------------------------------------------------------------------------------
 
 // Init prepares the action queue for work
-func (queueInstance *ActionQueue) Init(massagePump chan []byte) {
-	queueInstance.messagePump = massagePump
+func (queueInstance *ActionQueue) Init(messagePump chan []byte) {
+	queueInstance.messagePump = messagePump
+	queueInstance.identity = Identity{}
 	queueInstance.subscriptions = make(map[string]func(msg *Message, params ...interface{}))
 }
 
 //-----------------------------------------------------------------------------------------------
 
 // Identify creates an action message, which it then sends via the link.
-func (queueInstance *ActionQueue) Identify(clientID string) {
-	queueInstance.identity = clientID
+func (queueInstance *ActionQueue) Identify(clientID string, localIP string) {
+	queueInstance.identity.Name = clientID
+	queueInstance.identity.LocalIPV4 = localIP
 	webAction := new(ActionMessage)
 	webAction.ActionType = ACTION_ID
 	webAction.createPayload(clientID, "InternalControl", nil)
@@ -508,6 +516,6 @@ func (queueInstance *ActionQueue) PublishMessage(msg Serializable) {
 
 	// Get the type of the msg sent to me, and make the type name the topic.
 	typeName := reflect.TypeOf(msg).Name()
-	aMsg.createPayload(queueInstance.identity, typeName, msg.ToBytes())
+	aMsg.createPayload(queueInstance.identity.Name, typeName, msg.ToBytes())
 	queueInstance.sendMsg(aMsg)
 }
