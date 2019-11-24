@@ -329,6 +329,7 @@ func (workItems *WorkQueue) Init() bool {
 	workItems.Subscribers = make(NetworkedTopicMap, 0)
 	workItems.Messages = make(map[string]*Message, 0)
 	workItems.PublishChannel = make(chan PublishMessage)
+	workItems.IDList = make(map[string]Identity, 0)
 	MessageQueue = goconcurrentqueue.NewFIFO()
 	return true
 }
