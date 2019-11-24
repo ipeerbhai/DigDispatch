@@ -48,7 +48,7 @@ const (
 	ACTION_SUBSCRIBE = iota
 	ACTION_PUBLISH   = iota
 	ACTION_REQUEST   = iota // message is a request from client
-	ACTION_RESPOSE   = iota // message is a response from the server
+	ACTION_RESPONSE  = iota // message is a response from the server
 )
 
 const (
