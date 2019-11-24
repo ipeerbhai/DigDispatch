@@ -48,6 +48,7 @@ const (
 	ACTION_SUBSCRIBE = iota
 	ACTION_PUBLISH   = iota
 	ACTION_REQUEST   = iota // message is a request from client
+	ACTION_RESPOSE   = iota // message is a response from the server
 )
 
 const (
@@ -107,7 +108,7 @@ type ActionMessage struct {
 
 // Identity describes an endpoint
 type Identity struct {
-	Name      string // What's the name of this object?  Can be a model number.
+	Name    string // What's the name of this object?  Can be a model number.
 	LocalIP string // what's the localnet IP of the object?
 }
 
@@ -198,6 +199,21 @@ func (robot DriveState) FromBytes(stream []byte) {
 	conversionErr := json.Unmarshal(stream, &robot)
 	if conversionErr != nil {
 		robot = *new(DriveState) // we couldn't convert, so make a blank one.
+	}
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// ToBytes is to enable serializable of the Identity type.
+func (id Identity) ToBytes() []byte {
+	return toBytes(id)
+}
+
+// FromBytes is to enable serializable of the Identity type.
+func (id Identity) FromBytes(stream []byte) {
+	conversionErr := json.Unmarshal(stream, &id)
+	if conversionErr != nil {
+		id = Identity{} // we couldn't convert, so make a blank one.
 	}
 }
 
@@ -360,6 +376,24 @@ func (workItems *WorkQueue) ReceiveData(stream []byte) *ActionMessage {
 	}
 	return action
 }
+
+//-----------------------------------------------------------------------------------------------
+
+// CreateResponse parses the action and sends an immediate response.
+func (workItems *WorkQueue) CreateResponse(action *ActionMessage) ([]byte, error) {
+	// find out who the actual sender wants to know about.
+	targetName := action.Payload.MetaData.Topic
+
+	// look up the target
+	targetID := workItems.IDList[targetName]
+
+	// create a response message
+	myMetaData := MessageMetaData{Sender: "Server", Topic: "response/id", TemporalShake: TimeShake{AcknowledgedTime: time.Now()}}
+	responseMsg := Message{MetaData: myMetaData, MessageBuffer: targetID.ToBytes()}
+	return responseMsg.ToBytes()
+}
+
+//-----------------------------------------------------------------------------------------------
 
 // ExecuteAction takes an action message and modifies the work queue as needed.
 func (workItems *WorkQueue) ExecuteAction(action *ActionMessage) {
