@@ -122,7 +122,7 @@ type ActionQueue struct {
 // Serializable requires that all message data can go to/from byte slices
 type Serializable interface {
 	ToBytes() []byte
-	FromBytes([]byte)
+	FromBytes([]byte) interface{}
 }
 
 // Reducable aka "reduce-able" is a way for a message to collapse an array to a single element.
@@ -180,11 +180,12 @@ func (robot DriveCommand) ToBytes() []byte {
 //-----------------------------------------------------------------------------------------------
 
 // FromBytes finishes up the Serializable interface
-func (robot DriveCommand) FromBytes(stream []byte) {
+func (robot DriveCommand) FromBytes(stream []byte) interface{} {
 	conversionErr := json.Unmarshal(stream, &robot)
 	if conversionErr != nil {
 		robot = *new(DriveCommand) // we couldn't convert, so make a blank one.
 	}
+	return robot
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -195,11 +196,12 @@ func (robot DriveState) ToBytes() []byte {
 }
 
 // FromBytes finishes up the Serializable interface
-func (robot DriveState) FromBytes(stream []byte) {
+func (robot DriveState) FromBytes(stream []byte) interface{} {
 	conversionErr := json.Unmarshal(stream, &robot)
 	if conversionErr != nil {
 		robot = *new(DriveState) // we couldn't convert, so make a blank one.
 	}
+	return robot
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -210,11 +212,13 @@ func (id Identity) ToBytes() []byte {
 }
 
 // FromBytes is to enable serializable of the Identity type.
-func (id Identity) FromBytes(stream []byte) {
-	conversionErr := json.Unmarshal(stream, &id)
+func (id Identity) FromBytes(stream []byte) interface{} {
+	retVal := Identity{}
+	conversionErr := json.Unmarshal(stream, &retVal)
 	if conversionErr != nil {
 		id = Identity{} // we couldn't convert, so make a blank one.
 	}
+	return retVal
 }
 
 //-----------------------------------------------------------------------------------------------
