@@ -489,6 +489,15 @@ func (queueInstance *ActionQueue) Init(messagePump chan []byte) {
 
 //-----------------------------------------------------------------------------------------------
 
+// RequestLocalNetworkForTarget sends a request message, expects a response on the same socket.
+func (queueInstance *ActionQueue) RequestLocalNetworkForTarget(target string) {
+	msg := NewMessage(queueInstance.identity.Name, target, nil)
+	action := ActionMessage{ActionType: ACTION_REQUEST, Payload: *msg}
+	queueInstance.sendMsg(&action)
+}
+
+//-----------------------------------------------------------------------------------------------
+
 // Identify creates an action message, which it then sends via the link.
 func (queueInstance *ActionQueue) Identify(clientID string, localIP string) {
 	queueInstance.identity.Name = clientID
