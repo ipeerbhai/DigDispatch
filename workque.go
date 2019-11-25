@@ -381,7 +381,7 @@ func (workItems *WorkQueue) ReceiveData(stream []byte) *ActionMessage {
 //-----------------------------------------------------------------------------------------------
 
 // CreateResponse parses the action and sends an immediate response.
-func (workItems *WorkQueue) CreateResponse(action *ActionMessage) ([]byte, error) {
+func (workItems *WorkQueue) CreateResponse(action *ActionMessage) ActionMessage {
 	// find out who the actual sender wants to know about.
 	targetName := action.Payload.MetaData.Topic
 
@@ -389,9 +389,10 @@ func (workItems *WorkQueue) CreateResponse(action *ActionMessage) ([]byte, error
 	targetID := workItems.IDList[targetName]
 
 	// create a response message
-	myMetaData := MessageMetaData{Sender: "Server", Topic: "response/id", TemporalShake: TimeShake{AcknowledgedTime: time.Now()}}
+	myMetaData := MessageMetaData{Sender: "Server", Topic: "response/id", TemporalShake: NewTimeShake()}
 	responseMsg := Message{MetaData: myMetaData, MessageBuffer: targetID.ToBytes()}
-	return responseMsg.ToBytes()
+	responseAction := ActionMessage{ActionType: ACTION_RESPONSE, Sender: Identity{}, Payload: responseMsg}
+	return responseAction
 }
 
 //-----------------------------------------------------------------------------------------------
