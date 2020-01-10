@@ -469,7 +469,8 @@ func (webAction *ActionMessage) FromBytes(stream []byte) {
 
 //-----------------------------------------------------------------------------------------------
 
-func (webAction *ActionMessage) createPayload(Identity string, Topic string, Buffer []byte) {
+// CreatePayload is a simple function to create a full payload from a message.
+func (webAction *ActionMessage) CreatePayload(Identity string, Topic string, Buffer []byte) {
 	payload := NewMessage(Identity, Topic, Buffer)
 	webAction.Payload = *payload
 }
@@ -511,7 +512,7 @@ func (queueInstance *ActionQueue) Identify(clientID string, localIP string) {
 	webAction.Sender.Name = clientID
 	webAction.Sender.LocalIP = localIP
 	webAction.ActionType = ACTION_ID
-	webAction.createPayload(clientID, "InternalControl", nil)
+	webAction.CreatePayload(clientID, "InternalControl", nil)
 	queueInstance.sendMsg(webAction)
 }
 
@@ -526,7 +527,7 @@ func (queueInstance *ActionQueue) Subscribe(Notify string, Topic string, callbac
 	// Create the action for the server and send it
 	webAction := new(ActionMessage)
 	webAction.ActionType = ACTION_SUBSCRIBE
-	webAction.createPayload(Notify, Topic, nil)
+	webAction.CreatePayload(Notify, Topic, nil)
 	queueInstance.sendMsg(webAction)
 
 	// Add the callback to a process que
@@ -570,6 +571,6 @@ func (queueInstance *ActionQueue) PublishMessage(msg Serializable) {
 
 	// Get the type of the msg sent to me, and make the type name the topic.
 	typeName := reflect.TypeOf(msg).Name()
-	aMsg.createPayload(queueInstance.identity.Name, typeName, msg.ToBytes())
+	aMsg.CreatePayload(queueInstance.identity.Name, typeName, msg.ToBytes())
 	queueInstance.sendMsg(aMsg)
 }
