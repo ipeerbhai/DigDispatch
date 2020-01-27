@@ -34,6 +34,7 @@ package digdispatch
 import (
 	"encoding/json"
 	"fmt"
+	"image"
 	"reflect"
 	"time"
 
@@ -119,6 +120,12 @@ type ActionQueue struct {
 	subscriptions map[string]func(msg *Message, params ...interface{})
 }
 
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+// Serializable and Reducable  messages
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
 // Serializable requires that all message data can go to/from byte slices
 type Serializable interface {
 	ToBytes() []byte
@@ -137,11 +144,18 @@ type DriveCommand struct {
 	Command string // what do we want to send?
 }
 
-// DriveState is a serializable information struct, sent from robot to the controller.
+// DriveState is a serializable struct, used to get/set movement for a robot.
 type DriveState struct {
 	Direction       int // is this a set ( 0 ) or a get ( 1 )
 	LeftMotorPower  int // from -100 .. 100, % power to left motor.
 	RightMotorPower int // same as left
+}
+
+// ImageData is a serializable struct used to send image data around.
+type ImageData struct {
+	Size    image.Point // the resoltuion of the image
+	Format  string      // What's the coder?
+	imgData []byte      // the actual image as a pure byte slice
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -202,6 +216,24 @@ func (robot DriveState) FromBytes(stream []byte) interface{} {
 		robot = *new(DriveState) // we couldn't convert, so make a blank one.
 	}
 	return robot
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// ToBytes allows ImageData to comply with the serializable interface.
+func (img ImageData) ToBytes() []byte {
+	return toBytes((img))
+}
+
+//-----------------------------------------------------------------------------------------------
+
+// FromBytes allows ImageData to comply with the serializable interface.
+func (img ImageData) FromBytes(stream []byte) interface{} {
+	conversionErr := json.Unmarshal(stream, &img)
+	if conversionErr != nil {
+		img = ImageData{}
+	}
+	return img
 }
 
 //-----------------------------------------------------------------------------------------------
