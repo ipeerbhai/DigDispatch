@@ -153,9 +153,9 @@ type DriveState struct {
 
 // ImageData is a serializable struct used to send image data around.
 type ImageData struct {
-	Size    image.Point // the resoltuion of the image
-	Format  string      // What's the coder?
-	imgData []byte      // the actual image as a pure byte slice
+	Size     image.Point // the resoltuion of the image
+	Format   string      // What's the coder?
+	ImgBytes []byte      // the actual image as a pure byte slice
 }
 
 //-----------------------------------------------------------------------------------------------
