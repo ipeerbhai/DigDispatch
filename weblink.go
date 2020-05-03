@@ -41,8 +41,9 @@ func GetLocalIP() string {
 }
 
 //-----------------------------------------------------------------------------------------------
-func check(whatsWrong error) bool {
+func check(whatsWrong error, link *Weblink) bool {
 	if whatsWrong != nil {
+		link.LastErr = whatsWrong
 		fmt.Println(whatsWrong)
 		return true
 	}
@@ -55,6 +56,7 @@ type Weblink struct {
 	SecurityToken string          // a random GUID we need to always transmit on each command.
 	URL           url.URL         // Whereto?
 	Conn          *websocket.Conn // Let's keep this connection alive...
+	LastErr       error           // last error message.
 	header        http.Header     // to hold the header we get during a connection attempt.
 }
 
@@ -70,7 +72,7 @@ func (webhook *Weblink) Init(webServer string) {
 // memberConnect is unexported, and is used to hold what's needed to reconnect.
 func (webhook *Weblink) memberConnect() {
 	conn, _, err := websocket.DefaultDialer.Dial(webhook.URL.String(), webhook.header)
-	check(err)
+	check(err, webhook)
 	webhook.Conn = conn
 }
 
@@ -89,7 +91,7 @@ func (webhook *Weblink) WriteText(message chan []byte) {
 			// we might have a dropped connection.  Let's reconnect if possible, try again.
 			webhook.TryReconnect()
 			err = webhook.Conn.WriteMessage(websocket.TextMessage, data)
-			check(err)
+			check(err, webhook)
 		}
 	}
 }
@@ -105,10 +107,10 @@ func (webhook *Weblink) RunActionListener(queueInsance *ActionQueue) {
 	for {
 		if webhook.Conn != nil {
 			messageType, p, err := webhook.Conn.ReadMessage()
-			if check(err) {
+			if check(err, webhook) {
 				webhook.TryReconnect()
 				messageType, p, err = webhook.Conn.ReadMessage()
-				if check(err) {
+				if check(err, webhook) {
 					return
 				}
 			}
