@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 
 	"github.com/gorilla/websocket"
 )
@@ -72,6 +73,13 @@ func (webhook *Weblink) Init(webServer string) {
 
 // memberConnect is unexported, and is used to hold what's needed to reconnect.
 func (webhook *Weblink) memberConnect() {
+	defer func() {
+		r := recover()
+		if r != nil {
+			fmt.Println(r)
+		}
+	}()
+	// Warning, Dial impliments fatalpanic, and cannot be recovered!  Sheesh.
 	conn, _, err := websocket.DefaultDialer.Dial(webhook.URL.String(), webhook.header)
 	check(err, webhook)
 	webhook.Conn = conn
@@ -84,7 +92,14 @@ func (webhook *Weblink) Connect(header http.Header) {
 }
 
 // WriteText sends a text message to the server
-func (webhook *Weblink) WriteText(message chan []byte) {
+func (webhook *Weblink) WriteText(message chan []byte) bool {
+	ret := false
+	defer func() {
+		r := recover()
+		if r != nil {
+			fmt.Println("WriteMessage panicked")
+		}
+	}()
 	for {
 		data, _ := <-message // channel reads have a tuple of the payload and an opened state always in channels.
 		err := webhook.Conn.WriteMessage(websocket.TextMessage, data)
@@ -95,6 +110,7 @@ func (webhook *Weblink) WriteText(message chan []byte) {
 			check(err, webhook)
 		}
 	}
+	return ret
 }
 
 // TryReconnect attempts to recontact a server if the connection is broken
@@ -104,15 +120,16 @@ func (webhook *Weblink) TryReconnect() {
 }
 
 // RunActionListener listens for messages
-func (webhook *Weblink) RunActionListener(queueInsance *ActionQueue) {
+func (webhook *Weblink) RunActionListener(queueInsance *ActionQueue) bool {
 	for {
-		if webhook.Conn != nil {
+		nilCheck := reflect.ValueOf(webhook.Conn)
+		if !nilCheck.IsNil() {
 			messageType, p, err := webhook.Conn.ReadMessage()
 			if check(err, webhook) {
 				webhook.TryReconnect()
 				messageType, p, err = webhook.Conn.ReadMessage()
 				if check(err, webhook) {
-					return
+					return false
 				}
 			}
 			if messageType == websocket.TextMessage {
@@ -122,6 +139,9 @@ func (webhook *Weblink) RunActionListener(queueInsance *ActionQueue) {
 					queueInsance.ProcessMessage(msg)
 				}
 			}
+		} else {
+			// we have a nil type, break out
+			return false
 		}
 	}
 }
