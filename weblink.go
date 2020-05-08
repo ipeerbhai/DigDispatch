@@ -62,6 +62,7 @@ type Weblink struct {
 
 // Init initializes the type/struct
 func (webhook *Weblink) Init(webServer string) {
+	webhook.Server = webServer
 	webhook.URL = url.URL{
 		Scheme: "ws",
 		Host:   webServer,
