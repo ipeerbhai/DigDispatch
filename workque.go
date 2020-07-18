@@ -151,6 +151,19 @@ type DriveState struct {
 	RightMotorPower int // same as left
 }
 
+// Joystick represents an XY style joystick.
+type Joystick struct {
+	XValue float32 // the "x" value of the joystick.
+	YValue float32 // the "y" value of the joystick.
+}
+
+// ControlState is a serializable struct, used to forward controls to robots
+type ControlState struct {
+	LeftStick   Joystick
+	RightStick  Joystick
+	ToggleState int
+}
+
 // ImageData is a serializable struct used to send image data around.
 type ImageData struct {
 	Size     image.Point // the resoltuion of the image
@@ -251,6 +264,26 @@ func (id Identity) FromBytes(stream []byte) interface{} {
 		id = Identity{} // we couldn't convert, so make a blank one.
 	}
 	return retVal
+}
+
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+// ControlState stuff
+//-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
+// ToBytes is one of the required interfaces
+func (control ControlState) ToBytes() []byte {
+	return toBytes(control)
+}
+
+// FromBytes allows ControlState to comply with the serializable interface.
+func (control ControlState) FromBytes(stream []byte) interface{} {
+	conversionErr := json.Unmarshal(stream, &control)
+	if conversionErr != nil {
+		control = ControlState{} // we couldn't convert, make a blank one
+	}
+	return control
 }
 
 //-----------------------------------------------------------------------------------------------
